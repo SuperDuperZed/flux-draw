@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Flux — Generative Art</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;500;700&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--bg:#0a0a0f;--fg:#e8e8f0;--muted:#555568;--accent:#00ffa3}
+body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--fg);overflow:hidden;height:100dvh;width:100vw}
+canvas{display:block;position:fixed;inset:0;z-index:0}
+.ui{position:fixed;z-index:10;pointer-events:none}
+.top{top:24px;left:0;right:0;text-align:center}
+.title{font-weight:700;font-size:13px;letter-spacing:3px;text-transform:uppercase;color:var(--muted)}
+.bottom{bottom:28px;left:0;right:0;display:flex;flex-direction:column;align-items:center;gap:12px}
+.hint{font-size:12px;color:var(--muted);letter-spacing:1px;opacity:0;transition:opacity .6s}
+.hint.show{opacity:1}
+.btns{display:flex;gap:10px;pointer-events:all}
+.btn{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);color:var(--fg);padding:10px 22px;border-radius:100px;font-family:inherit;font-size:13px;cursor:pointer;transition:all .2s;letter-spacing:.5px;backdrop-filter:blur(12px)}
+.btn:hover{background:rgba(255,255,255,.12);border-color:var(--accent);color:#fff}
+.counter{position:fixed;top:24px;right:28px;z-index:10;font-size:11px;color:var(--muted);letter-spacing:1px;font-variant-numeric:tabular-nums}
+.fade{animation:fadeIn .8s ease}
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+.splash{position:fixed;inset:0;z-index:100;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:16px;background:var(--bg);transition:opacity .8s;cursor:pointer}
+.splash.gone{opacity:0;pointer-events:none}
+.splash h1{font-size:42px;font-weight:700;letter-spacing:-1px;background:linear-gradient(135deg,#00ffa3,#00b8ff);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.splash p{font-size:14px;color:var(--muted);letter-spacing:1px}
+</style>
+</head>
+<body>
+<div class="splash" id="splash" onclick="start()">
+  <h1>Flux</h1>
+  <p>Touch anywhere to begin</p>
+</div>
+<canvas id="c"></canvas>
+<div class="ui top"><div class="title" id="modeLabel">Ribbon</div></div>
+<div class="counter" id="counter">0 strokes</div>
+<div class="ui bottom">
+  <div class="hint" id="hint">Click and drag to paint with light</div>
+  <div class="btns">
+    <button class="btn" onclick="setMode(0)">Ribbon</button>
+    <button class="btn" onclick="setMode(1)">Nebula</button>
+    <button class="btn" onclick="setMode(2)">Shatter</button>
+    <button class="btn" onclick="clearCanvas()">Clear</button>
+  </div>
+</div>
+<script>
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+let W,H,dpr,mouse={x:0,y:0,px:0,py:0,down:false},mode=0,strokes=0,particles=[];
+const modes=['Ribbon','Nebula','Shatter'];
+const palette=[
+  [0,255,163],[0,184,255],[255,100,200],[255,200,50],[140,120,255],[255,80,80]
+];
+function resize(){dpr=devicePixelRatio||1;W=innerWidth;H=innerHeight;canvas.width=W*dpr;canvas.height=H*dpr;canvas.style.width=W+'px';canvas.style.height=H+'px';ctx.setTransform(dpr,0,0,dpr,0,0)}
+resize();addEventListener('resize',resize);
+
+function start(){
+  document.getElementById('splash').classList.add('gone');
+  setTimeout(()=>document.getElementById('hint').classList.add('show'),600);
+}
+
+function getColor(t){const i=t*palette.length%palette.length,j=Math.floor(i),f=i-j,a=palette[j%palette.length],b=palette[(j+1)%palette.length];return[a[0]+(b[0]-a[0])*f,a[1]+(b[1]-a[1])*f,a[2]+(b[2]-a[2])*f]}
+
+class Particle{
+  constructor(x,y,vx,vy,r,g,b,life,size){Object.assign(this,{x,y,vx,vy,r,g,b,life,maxLife:life,size})}
+  update(){this.x+=this.vx;this.y+=this.vy;this.vx*=.985;this.vy*=.985;this.life--;return this.life>0}
+  draw(c){const a=this.life/this.maxLife;ctx.beginPath();ctx.arc(this.x,this.y,this.size*a,0,Math.PI*2);ctx.fillStyle=`rgba(${this.r|0},${this.g|0},${this.b|0},${a*.7})`;ctx.fill()}
+}
+
+function spawnRibbon(x,y,px,py){
+  const dx=x-px,dy=y-py,d=Math.sqrt(dx*dx+dy*dy);
+  for(let i=0;i<3;i++){
+    const t=(Date.now()*.0003+i*.15)%1,[r,g,b]=getColor(t);
+    const spread=d*.15,angle=Math.atan2(dy,dx)+Math.PI/2;
+    particles.push(new Particle(
+      x+(Math.random()-.5)*spread+Math.cos(angle)*Math.random()*20,
+      y+(Math.random()-.5)*spread+Math.sin(angle)*Math.random()*20,
+      Math.cos(angle)*(Math.random()-.5)*.5,
+      Math.sin(angle)*(Math.random()-.5)*.5,
+      r,g,b,60+Math.random()*40,2+Math.random()*3
+    ));
+  }
+}
+
+function spawnNebula(x,y){
+  for(let i=0;i<8;i++){
+    const angle=Math.random()*Math.PI*2,speed=Math.random()*2+.5;
+    const t=Math.random(),[r,g,b]=getColor(t);
+    particles.push(new Particle(x,y,Math.cos(angle)*speed,Math.sin(angle)*speed,r,g,b,80+Math.random()*60,3+Math.random()*5));
+  }
+}
+
+function spawnShatter(x,y){
+  for(let i=0;i<12;i++){
+    const angle=Math.random()*Math.PI*2,speed=Math.random()*4+1;
+    const t=Math.random(),[r,g,b]=getColor(t);
+    particles.push(new Particle(x,y,Math.cos(angle)*speed,Math.sin(angle)*speed,r,g,b,40+Math.random()*30,1.5+Math.random()*2));
+  }
+}
+
+function onMove(x,y){
+  mouse.px=mouse.x;mouse.py=mouse.y;mouse.x=x;mouse.y=y;
+  if(!mouse.down)return;
+  if(mode===0)spawnRibbon(x,y,mouse.px,mouse.py);
+  else if(mode===1)spawnNebula(x,y);
+  else if(mode===2&&Math.random()>.6)spawnShatter(x,y);
+}
+
+canvas.addEventListener('mousedown',e=>{mouse.down=true;onMove(e.clientX,e.clientY)});
+canvas.addEventListener('mousemove',e=>onMove(e.clientX,e.clientY));
+canvas.addEventListener('mouseup',()=>{if(mouse.down){mouse.down=false;strokes++;document.getElementById('counter').textContent=strokes+' strokes'}});
+canvas.addEventListener('touchstart',e=>{e.preventDefault();mouse.down=true;const t=e.touches[0];onMove(t.clientX,t.clientY)},{passive:false});
+canvas.addEventListener('touchmove',e=>{e.preventDefault();const t=e.touches[0];onMove(t.clientX,t.clientY)},{passive:false});
+canvas.addEventListener('touchend',()=>{if(mouse.down){mouse.down=false;strokes++;document.getElementById('counter').textContent=strokes+' strokes'}});
+
+function setMode(m){mode=m;document.getElementById('modeLabel').textContent=modes[m]}
+function clearCanvas(){particles=[];strokes=0;document.getElementById('counter').textContent='0 strokes';ctx.clearRect(0,0,W,H)}
+
+function animate(){
+  requestAnimationFrame(animate);
+  // Slow fade for trails
+  ctx.fillStyle='rgba(10,10,15,0.035)';
+  ctx.fillRect(0,0,W,H);
+  // Ambient glow when mouse down
+  if(mouse.down){
+    const t=(Date.now()*.0005)%1,[r,g,b]=getColor(t);
+    const grd=ctx.createRadialGradient(mouse.x,mouse.y,0,mouse.x,mouse.y,80);
+    grd.addColorStop(0,`rgba(${r|0},${g|0},${b|0},0.08)`);
+    grd.addColorStop(1,'rgba(10,10,15,0)');
+    ctx.fillStyle=grd;ctx.fillRect(mouse.x-80,mouse.y-80,160,160);
+  }
+  particles=particles.filter(p=>{p.draw(ctx);return p.update()});
+  // Cap particles
+  if(particles.length>3000)particles.splice(0,particles.length-3000);
+}
+animate();
+</script>
+</body>
+</html>
